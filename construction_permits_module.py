@@ -192,8 +192,67 @@ def extract_permit_data(
         logger.error(f"An unexpected error occurred during GBIF extraction: {e}")
         # break
 
-    logger.info(f"Finished extraction. Total raw records extracted: {len(all_records)}")
-    return all_records
+
+def construction_etl(start_year, start_month, start_day, end_year, end_month, end_day, zip_code, num_permits, conn_string):
+    """
+    Orchestrates the ETL process for Monarch Butterfly data for a given month and year.
+    """
+    my_calendar ={
+        1: "january",
+        2: "february",
+        3: "march",
+        4: "april",
+        5: "may",
+        6: "june",
+        7: "july",
+        8: "august",
+        9: "september",
+        10: "october",
+        11: "november",
+        12: "december",
+    }
+
+
+    logger.info(f"\n\nRunning ETL from {start_year}-{start_month}-{start_day} to {end_year}-{end_month}-{end_day} \n")
+    logger.info("--- ETL process started ---") 
+    # start_date = datetime(year, month, 1)
+    # # Calculate the last day of the month
+    # if month == 12:
+    #     end_date = datetime(year, 12, 31)
+    # else:
+    #     end_date = datetime(year, month + 1, 1) - timedelta(days=1)
+
+    logger.info("\n\n\n--- EXTRACT STEP ---\n\n\n")
+
+    # raw_data = extract_gbif_data(target_year=year, target_month=month, whole_month=True, limiting_page_count=True, num_pages_to_extract=10, records_limitation=42)
+    # raw_data = extract_permit_data(target_year=year, target_month=month, whole_month=True, limiting_page_count=True, num_pages_to_extract=10)
+
+    raw_data = extract_permit_data(
+        start_year=start_year,
+        start_month=start_month,
+        start_day=start_day,
+        end_year=end_year,
+        end_month=end_month,
+        end_day=end_day,
+        zip_code=zip_code,
+        num_permits=num_permits, 
+        # records_limitation=None
+    )
+    if raw_data:
+        logger.info("\n\n\n--- TRANSFORM STEP ---\n\n\n")
+        # transformed_df = transform_gbif_data(raw_data)
+        # if not transformed_df.empty:
+        logger.info("\n\n\n--- LOAD STEP ---\n\n\n")
+            # load_data(transformed_df, conn_string, my_calendar[month] + " " + str(year))
+            # load_data(transformed_df, conn_string, calendar.month_name[month] + " " + str(year))
+        # else:
+            # logger.info("Transformed DataFrame is empty. No data to load.")
+
+        load_data()
+    else:
+        logger.info("No raw data extracted. ETL process aborted.")
+
+    logger.info("--- ETL process finished ---")
 
  
     for chosen_day in range(day_start, day_end+1):
