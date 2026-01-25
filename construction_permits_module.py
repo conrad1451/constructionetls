@@ -142,25 +142,112 @@ def extract_permit_data(
     logger.info(f"Extraction complete. Total records: {len(all_records)}")
     return all_records  # Return complete raw data
  
-    num_pages_to_extract = 10
-  
-    if num_pages_to_extract is not None and pages_fetched >= num_pages_to_extract:
-        logger.info(f"Reached num_pages_to_extract limit ({num_pages_to_extract}). Stopping extraction.")
-        # break
+# CHQ: Claude AI generated function
+def transform_permit_duration(raw_permits):
+    """
+    Transforms raw permit data for duration analysis.
+    Selects and derives only fields needed for this specific analysis.
+    """
+    transformed = []
+    
+    for permit in raw_permits:
+        # Skip if missing critical fields
+        if not all([permit.get('file_date'), permit.get('issue_date'), permit.get('final_date')]):
+            continue
+        
+        # Select key fields + calculate derived metrics
+        record = {
+            # Key identifiers
+            'permit_id': permit['id'],
+            'permit_number': permit['number'],
+            'permit_type': permit['type'],
+            'permit_subtype': permit['subtype'],
+            'status': permit['status'],
+            
+            # Dates
+            'file_date': permit['file_date'],
+            'issue_date': permit['issue_date'],
+            'final_date': permit.get('final_date'),
+            
+            # Durations
+            'approval_duration': permit.get('approval_duration'),
+            'construction_duration': permit.get('construction_duration'),
+            'total_duration': permit.get('total_duration'),
+            
+            # Derived metrics
+            'approval_ratio': permit.get('approval_duration', 0) / permit.get('total_duration', 1) if permit.get('total_duration') else None,
+            'construction_ratio': permit.get('construction_duration', 0) / permit.get('total_duration', 1) if permit.get('total_duration') else None,
+            
+            # Categorization
+            'duration_category': categorize_duration(permit.get('total_duration')),
+            'bottleneck_phase': 'approval' if permit.get('approval_duration', 0) > permit.get('construction_duration', 0) else 'construction',
+            
+            # Optional context fields
+            'property_type': permit.get('property_type'),
+            'job_value': permit.get('job_value'),
+        }
+        
+        transformed.append(record)
+    
+    return transformed
 
-    current_params = params.copy()
-    current_params['offset'] = offset
+def categorize_duration(days):
+    """Categorize permit duration."""
+    if days is None:
+        return 'Unknown'
+    if days < 30:
+        return 'Fast'
+    elif days < 180:
+        return 'Normal'
+    elif days < 365:
+        return 'Slow'
+    else:
+        return 'Very Slow'
+    
+def load_data(df, conn_string, table_name="gbif_occurrences"):
+    """
+    Loads the transformed DataFrame into the PostgreSQL database
+    using a predefined dtype map to ensure correct column types.
+    """
+    if df.empty:
+        logger.info("No data to load.")
+        return
+
     try:
-        data = fetch_construction_permits(SHOVELS_BASE_URL, current_params)
+        from sqlalchemy import create_engine
+        from sqlalchemy.types import String, DateTime, Float, BigInteger, Integer, Date
 
-        raw_records = data.get('results', [])
-        # records = final_set_of_records_to_scan(raw_records, records_limitation)
+        engine = create_engine(conn_string)
 
-        # all_records.extend(records)
+        logger.info(f"Attempting to load {len(df)} records into '{table_name}' table...")
 
-        records=raw_records
-        all_records=records
+        # NOTE: This line is no longer necessary as the dtype mapping will handle NaT
+        # df['date_only'] = df['date_only'].astype(str).replace({'NaT': None})
 
+        # CHQ: Corrected dtype mapping to use SQLAlchemy types
+        dtype_mapping = {
+            'gbifID': String,
+            'datasetKey': String,
+            'datasetName': String,
+            'publishingOrgKey': String,
+            'publishingOrganizationTitle': String,
+            'eventDate': String,
+            'eventDateParsed': DateTime,
+            'scientificName': String,
+            'vernacularName': String,
+            'taxonKey': BigInteger,
+            'kingdom': String,
+            'phylum': String,
+            'class': String,
+            'order': String,
+            'family': String,
+            'genus': String,
+            'species': String,
+            'decimalLatitude': Float,
+            'decimalLongitude': Float,
+            'coordinateUncertaintyInMeters': Float,
+            'countryCode': String,
+            'stateProvince': String,
 
         count = data.get('count', 0)
         end_of_records = data.get('endOfRecords', True)
