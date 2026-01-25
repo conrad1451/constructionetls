@@ -105,52 +105,53 @@ def extract_permit_data(
  
     num_pages_to_extract = 10
   
-    while not end_of_records:
-        # CHQ: Gemini AI added logic for breaking out of the loop when num pages is specified and exceeded
-        if num_pages_to_extract is not None and pages_fetched >= num_pages_to_extract:
-            logger.info(f"Reached num_pages_to_extract limit ({num_pages_to_extract}). Stopping extraction.")
-            break
+    if num_pages_to_extract is not None and pages_fetched >= num_pages_to_extract:
+        logger.info(f"Reached num_pages_to_extract limit ({num_pages_to_extract}). Stopping extraction.")
+        # break
 
-        current_params = params.copy()
-        current_params['offset'] = offset
-        try:
-            data = fetch_construction_permits(SHOVELS_BASE_URL, current_params)
+    current_params = params.copy()
+    current_params['offset'] = offset
+    try:
+        data = fetch_construction_permits(SHOVELS_BASE_URL, current_params)
 
-            raw_records = data.get('results', [])
-            records = final_set_of_records_to_scan(raw_records, records_limitation)
+        raw_records = data.get('results', [])
+        # records = final_set_of_records_to_scan(raw_records, records_limitation)
 
-            all_records.extend(records)
+        # all_records.extend(records)
 
-            count = data.get('count', 0)
-            end_of_records = data.get('endOfRecords', True)
-            offset += len(records) # Use len(records) to correctly advance offset
-            pages_fetched += 1 # Increment page count
-
-            logger.info(f"Fetched {len(records)} records. Total: {len(all_records)}. Next offset: {offset}. End of records: {end_of_records}")
-        
-            # CHQ: made a fix in monarch butterfly module - multiple pages should now be able to be obtained
-            # CHQ: Gemini AI implemented limiting page count logic    
-            # Implement limiting_page_count logic
-            if limiting_page_count is not None and pages_fetched >= num_pages_to_extract:
-                logger.info(f"Reached limiting_page_count ({num_pages_to_extract}). Stopping extraction.")
-                break # Break the loop if the limit is reached
+        records=raw_records
+        all_records=records
 
 
-            # Implement a small delay between GBIF API calls to be polite and avoid rate limits
-            if not end_of_records and len(records) > 0:
-                 time.sleep(0.5) # Half a second delay
-            elif len(records) == 0 and offset > 0: # If no records but offset is not 0, it indicates no more data
-                end_of_records = True
+        count = data.get('count', 0)
+        end_of_records = data.get('endOfRecords', True)
+        offset += len(records) # Use len(records) to correctly advance offset
+        pages_fetched += 1 # Increment page count
 
-        except requests.exceptions.HTTPError as e:
-            logger.error(f"HTTP error during GBIF extraction: {e.response.status_code} - {e.response.text}")
-            break
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Network error during GBIF extraction: {e}")
-            break
-        except Exception as e:
-            logger.error(f"An unexpected error occurred during GBIF extraction: {e}")
-            break
+        logger.info(f"Fetched {len(records)} records. Total: {len(all_records)}. Next offset: {offset}. End of records: {end_of_records}")
+    
+        # CHQ: made a fix in monarch butterfly module - multiple pages should now be able to be obtained
+        # CHQ: Gemini AI implemented limiting page count logic    
+        # Implement limiting_page_count logic
+        # if limiting_page_count is not None and pages_fetched >= num_pages_to_extract:
+        #     logger.info(f"Reached limiting_page_count ({num_pages_to_extract}). Stopping extraction.")
+ 
+
+        # Implement a small delay between GBIF API calls to be polite and avoid rate limits
+        if not end_of_records and len(records) > 0:
+                time.sleep(0.5) # Half a second delay
+        elif len(records) == 0 and offset > 0: # If no records but offset is not 0, it indicates no more data
+            end_of_records = True
+
+    except requests.exceptions.HTTPError as e:
+        logger.error(f"HTTP error during GBIF extraction: {e.response.status_code} - {e.response.text}")
+        # break
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Network error during GBIF extraction: {e}")
+        # break
+    except Exception as e:
+        logger.error(f"An unexpected error occurred during GBIF extraction: {e}")
+        # break
 
     logger.info(f"Finished extraction. Total raw records extracted: {len(all_records)}")
     return all_records
