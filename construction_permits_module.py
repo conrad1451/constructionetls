@@ -52,27 +52,21 @@ SHOVELS_API_KEY = os.getenv('SHOVELS_API_KEY')
     )),
     reraise=True # Re-raise the last exception after retries are exhausted
 )
-def fetch_construction_permits(endpoint, size):
+
+# CHQ: Gemini AI removed the endpoint parameter to function so endpoint is constructed from the params
+def fetch_construction_permits(params):
     """
-    Sends a batch of construction to the AI endpoint for analysis
-    and returns the results.
+    Fetches data from the Shovels API with retry logic.
     """
     if not SHOVELS_BASE_URL:
         raise ValueError("SHOVELS_BASE_URL environment variable is not set.")
-
-    # Use the new batch endpoint
-    endpoint = f"{SHOVELS_BASE_URL}/v2/permits/search?size={size}"
-
-    # headers = {'Content-Type': 'application/json'}
+    
+    endpoint = f"{SHOVELS_BASE_URL}/v2/permits/search"
     headers = {"X-API-Key": SHOVELS_API_KEY}
- 
-    logger.info(f"Attempting to fetch data from API endpoint.")
-    # response = requests.get(endpoint, headers=headers, data=data, timeout=60) # Add a timeout for safety
-    # response = requests.get(endpoint, timeout=60) # Add a timeout for safety
-
-    response = requests.get(endpoint, headers=headers)
- 
-    response.raise_for_status() # Raise HTTPError for bad responses (e.g., 400, 500)
+    
+    logger.info(f"Attempting to fetch data from: {endpoint} with params: {params}")
+    response = requests.get(endpoint, params=params, headers=headers)
+    response.raise_for_status()
     return response.json()
 
  
@@ -120,7 +114,7 @@ def extract_permit_data(
         current_params = params.copy()
         current_params['offset'] = offset
         try:
-            data = fetch_gbif_page_etl(SHOVELS_BASE_URL, current_params)
+            data = fetch_construction_permits(SHOVELS_BASE_URL, current_params)
 
             raw_records = data.get('results', [])
             records = final_set_of_records_to_scan(raw_records, records_limitation)
