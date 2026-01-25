@@ -1,0 +1,15 @@
+Flask==2.3.3
+Flask-Cors==3.0.10
+psycopg2-binary==2.9.9
+python-dotenv==1.0.1
+gunicorn==23.0.0
+requests
+Pillow
+# pandas
+pandas>=2.0.0
+tenacity
+logging
+ 
+python-dateutil
+sqlalchemy
+urllib3>=2.6.0 # not directly required, pinned by Snyk to avoid a vulnerability
