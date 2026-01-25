@@ -294,28 +294,8 @@ def load_data(df, conn_string, table_name="permit_durations"):
     except Exception as e:
         logger.error(f"Error loading data into database: {e}", exc_info=True)
         raise  # Re-raise to see full error
-    
-# CHQ: Gemini AI fixed function to pass parameters as a dictionary 
-# Inside your load logic after the data is successfully saved to the new table
-def register_date_in_inventory(engine, date_obj, table_name, count):
-    # 1. Use named placeholders (:key)
-    query = text("""
-    INSERT INTO data_inventory (available_date, table_name, record_count)
-    VALUES (:available_date, :table_name, :record_count)
-    ON CONFLICT (available_date) DO UPDATE SET 
-        table_name = EXCLUDED.table_name,
-        record_count = EXCLUDED.record_count,
-        processed_at = CURRENT_TIMESTAMP;
-    """)
-    
-    with engine.begin() as conn:
-        # 2. Pass as a DICTIONARY to satisfy SQLAlchemy 2.0
-        conn.execute(query, {
-            "available_date": date_obj,
-            "table_name": table_name,
-            "record_count": count
-        })
- 
+  
+# --- Main ETL Orchestration Function ---
 
 
 
@@ -381,5 +361,65 @@ def construction_etl(start_year, start_month, start_day, end_year, end_month, en
     logger.info("--- ETL process finished ---")
 
  
-    for chosen_day in range(day_start, day_end+1):
-        monarch_etl_day_scan(year, month, chosen_day, conn_string) # For Jun 30 2025 # had 164 entries
+
+def permit_search_etl_scan(start_year, start_month, start_day, end_year, end_month, end_day, zip_code, num_permits, conn_string):
+    """
+    Orchestrates the ETL process for Construction data for a given month and year.
+    """
+
+    my_calendar = {
+        1: "january", 2: "february", 3: "march", 4: "april", 5: "may", 6: "june",
+        7: "july", 8: "august", 9: "september", 10: "october", 11: "november", 12: "december",
+    }
+
+    logger.info(f"\n\nRunning ETL for dates in range {start_year}-{start_month}-{start_day} to  {end_year}-{end_month}-{end_day} \n")
+    logger.info("--- ETL process started ---")
+
+    logger.info("\n\n\n--- EXTRACT STEP ---\n\n\n")
+
+    raw_data = extract_permit_data(
+        start_year=start_year,
+        start_month=start_month,
+        start_day=start_day,
+        end_year=end_year,
+        end_month=end_month,
+        end_day=end_day,
+        zip_code=zip_code,
+        num_permits=num_permits, 
+        # records_limitation=None
+    )
+
+    if raw_data:
+        logger.info("\n\n\n--- TRANSFORM STEP ---\n\n\n")
+        transformed_df = transform_gbif_data(raw_data)
+        if not transformed_df.empty:
+            logger.info("\n\n\n--- LOAD STEP ---\n\n\n")
+            # Corrected line: pass the variables directly to the table name string
+
+            table_name = ""
+
+            if(day < 10):
+                table_name = f"{my_calendar[month]}0{day}{year}" 
+            else:
+                table_name = f"{my_calendar[month]}{day}{year}" 
+ 
+            load_data(transformed_df, conn_string, table_name)
+            
+            # 2. Register the completion in the inventory table
+            engine = create_engine(conn_string)
+            
+            # Create a date object for the inventory
+            date_obj = datetime(year, month, day).date()
+            record_count = len(transformed_df)
+            
+            logger.info(f"Registering {date_obj} in data_inventory...")
+            # register_date_in_inventory(engine, date_obj, table_name, record_count)
+            register_date_in_inventory_as_df(engine, date_obj, table_name, record_count)
+            
+        else:
+            logger.info("Transformed DataFrame is empty. No data to load.")
+    else:
+        logger.info("No raw data extracted. ETL process aborted.")
+
+    logger.info("--- ETL process finished ---")
+ 
