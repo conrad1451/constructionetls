@@ -1,0 +1,166 @@
+# construction_permits_module.py
+
+import os
+import time
+import logging
+import requests
+import json
+import pandas as pd
+from dateutil.parser import parse as parse_date
+from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
+from datetime import datetime  # <--- ADD THIS LINE
+
+# import calendar
+import math
+
+import psycopg2
+# from sqlalchemy import create_engine, BigInteger
+from sqlalchemy import create_engine, text
+from sqlalchemy.types import BigInteger
+
+# from dataclasses import dataclass
+# from typing import Optional
+ 
+# --- Configure Logging ---
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# --- GBIF API Configuration ---
+SHOVELS_BASE_URL = os.getenv('SHOVELS_BASE_URL')
+SHOVELS_API_KEY = os.getenv('SHOVELS_API_KEY')
+ 
+# --- Utility Functions ---
+
+@retry(
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    stop=stop_after_attempt(5),
+    retry=retry_if_exception_type((
+        requests.exceptions.ConnectionError,
+        requests.exceptions.Timeout,
+        requests.exceptions.HTTPError # This includes 4xx and 5xx errors from the server
+    )),
+    reraise=True
+) 
+# --- NEW: Function to call the AI endpoint in batch mode ---
+@retry(
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    stop=stop_after_attempt(5),
+    retry=retry_if_exception_type((
+        requests.exceptions.ConnectionError,
+        requests.exceptions.Timeout,
+        requests.exceptions.HTTPError # This includes 4xx and 5xx errors from the AI server
+    )),
+    reraise=True # Re-raise the last exception after retries are exhausted
+)
+def fetch_construction_permits(endpoint, size):
+    """
+    Sends a batch of construction to the AI endpoint for analysis
+    and returns the results.
+    """
+    if not SHOVELS_BASE_URL:
+        raise ValueError("SHOVELS_BASE_URL environment variable is not set.")
+
+    # Use the new batch endpoint
+    endpoint = f"{SHOVELS_BASE_URL}/v2/permits/search?size={size}"
+
+    # headers = {'Content-Type': 'application/json'}
+    headers = {"X-API-Key": SHOVELS_API_KEY}
+ 
+    logger.info(f"Attempting to fetch data from API endpoint.")
+    # response = requests.get(endpoint, headers=headers, data=data, timeout=60) # Add a timeout for safety
+    # response = requests.get(endpoint, timeout=60) # Add a timeout for safety
+
+    response = requests.get(endpoint, headers=headers)
+ 
+    response.raise_for_status() # Raise HTTPError for bad responses (e.g., 400, 500)
+    return response.json()
+
+ 
+
+# --- Extraction Function ---
+ 
+
+def extract_permit_data(        
+    start_year=2024,
+    start_month=6,
+    start_day=30,
+    end_year=2026,
+    end_month=1,
+    end_day=24,
+    zip_code=78701,
+    num_permits=10,    
+):
+    """
+    Extracts occurrence data from the GBIF API, supporting date range filtering.
+    """
+    all_records = []
+    offset = 0
+    end_of_records = False
+    pages_fetched = 0 # To track how many pages we've actually fetched
+
+    params = {
+        'start_year': start_year,
+        'start_month': start_month,
+        'start_day': start_day,
+        'end_year': end_year,
+        'end_month': end_month,
+        'end_day': end_day,
+        'zip_code': zip_code,
+        'num_permits': num_permits
+    }
+ 
+    num_pages_to_extract = 10
+  
+    while not end_of_records:
+        # CHQ: Gemini AI added logic for breaking out of the loop when num pages is specified and exceeded
+        if num_pages_to_extract is not None and pages_fetched >= num_pages_to_extract:
+            logger.info(f"Reached num_pages_to_extract limit ({num_pages_to_extract}). Stopping extraction.")
+            break
+
+        current_params = params.copy()
+        current_params['offset'] = offset
+        try:
+            data = fetch_gbif_page_etl(SHOVELS_BASE_URL, current_params)
+
+            raw_records = data.get('results', [])
+            records = final_set_of_records_to_scan(raw_records, records_limitation)
+
+            all_records.extend(records)
+
+            count = data.get('count', 0)
+            end_of_records = data.get('endOfRecords', True)
+            offset += len(records) # Use len(records) to correctly advance offset
+            pages_fetched += 1 # Increment page count
+
+            logger.info(f"Fetched {len(records)} records. Total: {len(all_records)}. Next offset: {offset}. End of records: {end_of_records}")
+        
+            # CHQ: made a fix in monarch butterfly module - multiple pages should now be able to be obtained
+            # CHQ: Gemini AI implemented limiting page count logic    
+            # Implement limiting_page_count logic
+            if limiting_page_count is not None and pages_fetched >= num_pages_to_extract:
+                logger.info(f"Reached limiting_page_count ({num_pages_to_extract}). Stopping extraction.")
+                break # Break the loop if the limit is reached
+
+
+            # Implement a small delay between GBIF API calls to be polite and avoid rate limits
+            if not end_of_records and len(records) > 0:
+                 time.sleep(0.5) # Half a second delay
+            elif len(records) == 0 and offset > 0: # If no records but offset is not 0, it indicates no more data
+                end_of_records = True
+
+        except requests.exceptions.HTTPError as e:
+            logger.error(f"HTTP error during GBIF extraction: {e.response.status_code} - {e.response.text}")
+            break
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Network error during GBIF extraction: {e}")
+            break
+        except Exception as e:
+            logger.error(f"An unexpected error occurred during GBIF extraction: {e}")
+            break
+
+    logger.info(f"Finished extraction. Total raw records extracted: {len(all_records)}")
+    return all_records
+
+ 
+    for chosen_day in range(day_start, day_end+1):
+        monarch_etl_day_scan(year, month, chosen_day, conn_string) # For Jun 30 2025 # had 164 entries
