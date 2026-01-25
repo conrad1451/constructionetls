@@ -295,28 +295,28 @@ def load_data(df, conn_string, table_name="permit_durations"):
         logger.error(f"Error loading data into database: {e}", exc_info=True)
         raise  # Re-raise to see full error
     
-        # CHQ: made a fix in monarch butterfly module - multiple pages should now be able to be obtained
-        # CHQ: Gemini AI implemented limiting page count logic    
-        # Implement limiting_page_count logic
-        # if limiting_page_count is not None and pages_fetched >= num_pages_to_extract:
-        #     logger.info(f"Reached limiting_page_count ({num_pages_to_extract}). Stopping extraction.")
+# CHQ: Gemini AI fixed function to pass parameters as a dictionary 
+# Inside your load logic after the data is successfully saved to the new table
+def register_date_in_inventory(engine, date_obj, table_name, count):
+    # 1. Use named placeholders (:key)
+    query = text("""
+    INSERT INTO data_inventory (available_date, table_name, record_count)
+    VALUES (:available_date, :table_name, :record_count)
+    ON CONFLICT (available_date) DO UPDATE SET 
+        table_name = EXCLUDED.table_name,
+        record_count = EXCLUDED.record_count,
+        processed_at = CURRENT_TIMESTAMP;
+    """)
+    
+    with engine.begin() as conn:
+        # 2. Pass as a DICTIONARY to satisfy SQLAlchemy 2.0
+        conn.execute(query, {
+            "available_date": date_obj,
+            "table_name": table_name,
+            "record_count": count
+        })
  
 
-        # Implement a small delay between GBIF API calls to be polite and avoid rate limits
-        if not end_of_records and len(records) > 0:
-                time.sleep(0.5) # Half a second delay
-        elif len(records) == 0 and offset > 0: # If no records but offset is not 0, it indicates no more data
-            end_of_records = True
-
-    except requests.exceptions.HTTPError as e:
-        logger.error(f"HTTP error during GBIF extraction: {e.response.status_code} - {e.response.text}")
-        # break
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Network error during GBIF extraction: {e}")
-        # break
-    except Exception as e:
-        logger.error(f"An unexpected error occurred during GBIF extraction: {e}")
-        # break
 
 
 def construction_etl(start_year, start_month, start_day, end_year, end_month, end_day, zip_code, num_permits, conn_string):
