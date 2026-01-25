@@ -73,7 +73,7 @@ def fetch_construction_permits(params):
 
 # --- Extraction Function ---
  
-
+# CHQ: Claude AI included pagination 
 def extract_permit_data(        
     start_year=2024,
     start_month=6,
@@ -85,13 +85,14 @@ def extract_permit_data(
     num_permits=10,    
 ):
     """
-    Extracts occurrence data from the GBIF API, supporting date range filtering.
+    Extracts permit data from the Shovels API.
+    Returns complete raw records for downstream transformation.
     """
     all_records = []
     offset = 0
-    end_of_records = False
-    pages_fetched = 0 # To track how many pages we've actually fetched
-
+    pages_fetched = 0
+    num_pages_to_extract = 10
+    
     params = {
         'start_year': start_year,
         'start_month': start_month,
@@ -102,6 +103,44 @@ def extract_permit_data(
         'zip_code': zip_code,
         'num_permits': num_permits
     }
+    
+    while pages_fetched < num_pages_to_extract:
+        current_params = params.copy()
+        current_params['offset'] = offset
+        
+        try:
+            data = fetch_construction_permits(SHOVELS_BASE_URL, current_params)
+            records = data.get('items', [])  # Based on your JSON structure
+            
+            if not records:
+                logger.info("No more records available.")
+                break
+            
+            all_records.extend(records)  # Keep all fields
+            offset += len(records)
+            pages_fetched += 1
+            
+            logger.info(f"Fetched page {pages_fetched}: {len(records)} records. Total: {len(all_records)}")
+            
+            # Check if there's a next page
+            if data.get('next_cursor') is None:
+                logger.info("Reached end of available data.")
+                break
+            
+            time.sleep(0.5)  # Rate limiting
+            
+        except requests.exceptions.HTTPError as e:
+            logger.error(f"HTTP error: {e.response.status_code} - {e.response.text}")
+            break
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Network error: {e}")
+            break
+        except Exception as e:
+            logger.error(f"Unexpected error: {e}")
+            break
+    
+    logger.info(f"Extraction complete. Total records: {len(all_records)}")
+    return all_records  # Return complete raw data
  
     num_pages_to_extract = 10
   
