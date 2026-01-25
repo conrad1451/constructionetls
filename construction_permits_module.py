@@ -220,58 +220,80 @@ def categorize_duration(days):
         return 'Slow'
     else:
         return 'Very Slow'
-    
-def load_data(df, conn_string, table_name="gbif_occurrences"):
+
+def load_data(df, conn_string, table_name="permit_durations"):
     """
     Loads the transformed DataFrame into the PostgreSQL database
-    using a predefined dtype map to ensure correct column types.
+    with correct column types for permit duration analysis.
     """
     if df.empty:
         logger.info("No data to load.")
         return
-
+    
     try:
         from sqlalchemy import create_engine
-        from sqlalchemy.types import String, DateTime, Float, BigInteger, Integer, Date
-
+        from sqlalchemy.types import String, DateTime, Float, Integer, Numeric
+        
         engine = create_engine(conn_string)
 
         logger.info(f"Attempting to load {len(df)} records into '{table_name}' table...")
-
-        # NOTE: This line is no longer necessary as the dtype mapping will handle NaT
-        # df['date_only'] = df['date_only'].astype(str).replace({'NaT': None})
-
-        # CHQ: Corrected dtype mapping to use SQLAlchemy types
+        
+        # Dtype mapping for transformed permit duration data
         dtype_mapping = {
-            'gbifID': String,
-            'datasetKey': String,
-            'datasetName': String,
-            'publishingOrgKey': String,
-            'publishingOrganizationTitle': String,
-            'eventDate': String,
-            'eventDateParsed': DateTime,
-            'scientificName': String,
-            'vernacularName': String,
-            'taxonKey': BigInteger,
-            'kingdom': String,
-            'phylum': String,
-            'class': String,
-            'order': String,
-            'family': String,
-            'genus': String,
-            'species': String,
-            'decimalLatitude': Float,
-            'decimalLongitude': Float,
-            'coordinateUncertaintyInMeters': Float,
-            'countryCode': String,
-            'stateProvince': String,
-
-        count = data.get('count', 0)
-        end_of_records = data.get('endOfRecords', True)
-        offset += len(records) # Use len(records) to correctly advance offset
-        pages_fetched += 1 # Increment page count
-
-        logger.info(f"Fetched {len(records)} records. Total: {len(all_records)}. Next offset: {offset}. End of records: {end_of_records}")
+            # Identifiers
+            'permit_id': String(50),
+            'permit_number': String(50),
+            'permit_type': String(50),
+            'permit_subtype': String(100),
+            'status': String(50),
+            'contractor_id': String(50),
+            
+            # Dates - use DateTime for proper date columns
+            'file_date': DateTime,
+            'issue_date': DateTime,
+            'final_date': DateTime,
+            
+            # Durations - use Integer for day counts
+            'approval_duration': Integer,
+            'construction_duration': Integer,
+            'total_duration': Integer,
+            
+            # Ratios - use Numeric for precision
+            'approval_ratio': Numeric(5, 3),  # e.g., 0.123
+            'construction_ratio': Numeric(5, 3),
+            
+            # Categories
+            'duration_category': String(20),
+            'bottleneck_phase': String(20),
+            
+            # Context fields
+            'property_type': String(50),
+            'job_value': Numeric(12, 2),  # For currency values
+            
+            # Audit
+            'extracted_at': DateTime,
+        }
+        
+        # Only include columns that exist in the DataFrame
+        dtype_mapping_filtered = {
+            col: dtype for col, dtype in dtype_mapping.items() 
+            if col in df.columns
+        }
+        
+        # Load data
+        df.to_sql(
+            table_name, 
+            engine, 
+            if_exists='append',  # Changed from 'replace' to preserve historical data
+            index=False, 
+            dtype=dtype_mapping_filtered
+        )
+        
+        logger.info(f"Successfully loaded {len(df)} records into '{table_name}'.")
+        
+    except Exception as e:
+        logger.error(f"Error loading data into database: {e}", exc_info=True)
+        raise  # Re-raise to see full error
     
         # CHQ: made a fix in monarch butterfly module - multiple pages should now be able to be obtained
         # CHQ: Gemini AI implemented limiting page count logic    
