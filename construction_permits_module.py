@@ -146,50 +146,67 @@ def extract_permit_data(
 def transform_permit_duration(raw_permits):
     """
     Transforms raw permit data for duration analysis.
-    Selects and derives only fields needed for this specific analysis.
+    Returns a pandas DataFrame ready for analysis and loading.
     """
-    transformed = []
+    if not raw_permits:
+        return pd.DataFrame()
     
-    for permit in raw_permits:
-        # Skip if missing critical fields
-        if not all([permit.get('file_date'), permit.get('issue_date'), permit.get('final_date')]):
-            continue
-        
-        # Select key fields + calculate derived metrics
-        record = {
-            # Key identifiers
-            'permit_id': permit['id'],
-            'permit_number': permit['number'],
-            'permit_type': permit['type'],
-            'permit_subtype': permit['subtype'],
-            'status': permit['status'],
-            
-            # Dates
-            'file_date': permit['file_date'],
-            'issue_date': permit['issue_date'],
-            'final_date': permit.get('final_date'),
-            
-            # Durations
-            'approval_duration': permit.get('approval_duration'),
-            'construction_duration': permit.get('construction_duration'),
-            'total_duration': permit.get('total_duration'),
-            
-            # Derived metrics
-            'approval_ratio': permit.get('approval_duration', 0) / permit.get('total_duration', 1) if permit.get('total_duration') else None,
-            'construction_ratio': permit.get('construction_duration', 0) / permit.get('total_duration', 1) if permit.get('total_duration') else None,
-            
-            # Categorization
-            'duration_category': categorize_duration(permit.get('total_duration')),
-            'bottleneck_phase': 'approval' if permit.get('approval_duration', 0) > permit.get('construction_duration', 0) else 'construction',
-            
-            # Optional context fields
-            'property_type': permit.get('property_type'),
-            'job_value': permit.get('job_value'),
-        }
-        
-        transformed.append(record)
+    # Convert to DataFrame first
+    df = pd.DataFrame(raw_permits)
     
-    return transformed
+    # Filter out records with missing critical dates
+    df = df.dropna(subset=['file_date', 'issue_date', 'final_date'])
+    
+    # Select key fields
+    fields_to_keep = [
+        'id', 'number', 'type', 'subtype', 'status',
+        'file_date', 'issue_date', 'final_date',
+        'approval_duration', 'construction_duration', 'total_duration',
+        'property_type', 'job_value', 'contractor_id'
+    ]
+    
+    df_clean = df[fields_to_keep].copy()
+    
+    # Rename for clarity
+    df_clean.rename(columns={
+        'id': 'permit_id',
+        'number': 'permit_number',
+        'type': 'permit_type',
+        'subtype': 'permit_subtype'
+    }, inplace=True)
+    
+    # Convert dates to datetime
+    df_clean['file_date'] = pd.to_datetime(df_clean['file_date'])
+    df_clean['issue_date'] = pd.to_datetime(df_clean['issue_date'])
+    df_clean['final_date'] = pd.to_datetime(df_clean['final_date'])
+    
+    # Calculate derived metrics
+    df_clean['approval_ratio'] = (
+        df_clean['approval_duration'] / df_clean['total_duration']
+    ).round(3)
+    
+    df_clean['construction_ratio'] = (
+        df_clean['construction_duration'] / df_clean['total_duration']
+    ).round(3)
+    
+    # Categorize duration
+    df_clean['duration_category'] = pd.cut(
+        df_clean['total_duration'],
+        bins=[0, 30, 180, 365, float('inf')],
+        labels=['Fast', 'Normal', 'Slow', 'Very Slow']
+    )
+    
+    # Identify bottleneck phase
+    df_clean['bottleneck_phase'] = df_clean.apply(
+        lambda row: 'approval' if row['approval_duration'] > row['construction_duration'] else 'construction',
+        axis=1
+    )
+    
+    # Add extraction timestamp for audit trail
+    df_clean['extracted_at'] = datetime.now()
+    
+    return df_clean
+
 
 def categorize_duration(days):
     """Categorize permit duration."""
