@@ -43,11 +43,40 @@ def fetch_construction_permits(params):
     url = f"{SHOVELS_BASE_URL}/permits/search"
     headers = {"X-API-Key": SHOVELS_API_KEY}
 
-    
-    start_date = str(params['start_year'])+"-"+str(params['start_month'])+"-"+str(params['start_day'])
-    
-    end_date = str(params['end_year'])+"-"+str(params['end_month'])+"-"+str(params['end_day'])
-    
+    int(params['start_year'])
+
+    start_day = int(params['start_day'])
+    start_month = int(params['start_month'])
+    start_year = params['start_year']
+    end_day = int(params['end_day'])
+    end_month = int(params['end_month'])
+    end_year = params['end_year']
+
+    if(start_day < 10):
+        start_day_string = f"0{int(start_day)}" 
+    else:
+        start_day_string = f"{int(start_day)}" 
+ 
+    if(end_day < 10):
+        end_day_string = f"0{int(end_day)}" 
+    else:
+        end_day_string = f"{int(end_day)}" 
+
+    if(start_month < 10):
+        start_month_string = f"0{int(start_month)}" 
+    else:
+        start_month_string = f"{int(start_month)}" 
+ 
+    if(end_month< 10):
+        end_month_string = f"0{int(end_month)}" 
+    else:
+        end_month_string = f"{int(end_month)}" 
+  
+
+    start_date = f"{str(params['start_year'])}-{start_month_string}-{start_day_string}" 
+
+    end_date = f"{str(params['end_year'])}-{end_month_string}-{end_day_string}"
+         
     final_params = {
         'geo_id': params['zip_code'], 
         'size': 15,
