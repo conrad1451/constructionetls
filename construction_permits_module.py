@@ -528,7 +528,12 @@ def test_api_endpoint():
     headers = {'X-API-Key': SHOVELS_API_KEY}
     
     test_cases = [
-    {'zip_code': '78701', 'num_permits': 1}
+    {
+        "zip_code": "78701",
+        "permit_from": "2024-01-01",
+        "permit_to": "2024-01-02",
+        "num_permits": 1,
+    }
     ]
     
     for i, params in enumerate(test_cases, 1):
