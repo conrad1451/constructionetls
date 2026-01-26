@@ -44,9 +44,10 @@ def fetch_construction_permits(params):
     headers = {"X-API-Key": SHOVELS_API_KEY}
 
     
-    start_date = str(f"{str(params['start_year'])-str(params['start_month'])-str(params['start_day'])}")
-    end_date = str(f"{str(params['end_year'])-str(params['end_month'])-str(params['end_day'])}")
-
+    start_date = str(params['start_year'])+"-"+str(params['start_month'])+"-"+str(params['start_day'])
+    
+    end_date = str(params['end_year'])+"-"+str(params['end_month'])+"-"+str(params['end_day'])
+    
     final_params = {
         'geo_id': params['zip_code'], 
         'size': 15,
