@@ -31,11 +31,8 @@ jobs:
 
     # Set environment variables from GitHub Secrets
     env:
-      NEON_DB_HOST: ${{ secrets.NEON_DB_HOST }}
-      NEON_DB_NAME: ${{ secrets.NEON_DB_NAME }}
-      NEON_DB_USER: ${{ secrets.NEON_DB_USER }}
-      NEON_DB_PASSWORD: ${{ secrets.NEON_DB_PASSWORD }}
-      NEON_DB_PORT: ${{ secrets.NEON_DB_PORT }}
+      SHOVELS_BASE_URL: ${{ secrets.SHOVELS_BASE_URL }}
+      SHOVELS_API_KEY: ${{ secrets.SHOVELS_API_KEY }}
       XATA_DB_CONSTRUCTION: ${{ secrets.XATA_DB_CONSTRUCTION }}
     steps:
       - name: Checkout code
