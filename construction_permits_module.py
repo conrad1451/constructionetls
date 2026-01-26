@@ -54,7 +54,7 @@ SHOVELS_API_KEY = os.getenv('SHOVELS_API_KEY')
 )
 
 # CHQ: Gemini AI removed the endpoint parameter to function so endpoint is constructed from the params
-def fetch_construction_permits(params):
+def fetch_construction_permits_old(params):
     """
     Fetches data from the Shovels API with retry logic.
     """
@@ -70,12 +70,86 @@ def fetch_construction_permits(params):
     return response.json()
 
  
+def fetch_construction_permits(base_url, params, max_retries=3):
+    """
+    Fetch construction permits with limited retries.
+    """
+    url = f"{base_url}/v2/permits/search"
+    
+    logger.info(f"Attempting to fetch data from: {url} with params: {params}")
+     
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(
+                url, 
+                params=params,
+                headers={'Authorization': f'Bearer {SHOVELS_API_KEY}'},  # If needed
+                timeout=30
+            )
+            response.raise_for_status()
+            return response.json()
+            
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                logger.error(f"404 Not Found - endpoint or params invalid")
+                raise  # Don't retry 404s
+            
+            if attempt < max_retries - 1:
+                wait_time = 2 ** attempt  # Exponential backoff
+                logger.warning(f"Attempt {attempt + 1} failed, retrying in {wait_time}s...")
+                time.sleep(wait_time)
+            else:
+                logger.error(f"All {max_retries} attempts failed")
+                raise
+                
+        except Exception as e:
+            logger.error(f"Request failed: {e}")
+            raise
+    
+    return None
 
 # --- Extraction Function ---
  
+
+def extract_all_permits(zip_code=78701, max_records=1000):
+    """
+    Extracts ALL permits using pagination.
+    Loops until no more data or max_records reached.
+    """
+    all_records = []
+    offset = 0
+    page_size = 100
+    
+    while len(all_records) < max_records:
+        params = {
+            'zip_code': zip_code,
+            'num_permits': page_size,
+            'offset': offset  # This changes each loop
+        }
+        
+        data = fetch_construction_permits(SHOVELS_BASE_URL, params)
+        records = data.get('items', [])
+        
+        if not records:
+            break  # No more data
+        
+        all_records.extend(records)
+        offset += len(records)
+        
+        logger.info(f"Fetched {len(records)} records. Total: {len(all_records)}")
+    
+    return all_records
+
+# Simple version for daily ETL
+def extract_permit_dataold2(zip_code=78701, num_permits=100):
+    """Get the latest permits - one API call."""
+    params = {'zip_code': zip_code, 'num_permits': num_permits}
+    data = fetch_construction_permits(SHOVELS_BASE_URL, params)
+    return data.get('items', [])
+
 # CHQ: Claude AI included pagination 
-def extract_permit_data(        
-    start_year=2024,
+def extract_permit_data_older(        
+    start_year=2025,
     start_month=6,
     start_day=30,
     end_year=2026,
@@ -109,7 +183,7 @@ def extract_permit_data(
         current_params['offset'] = offset
         
         try:
-            data = fetch_construction_permits(current_params)
+            data = fetch_construction_permits(SHOVELS_BASE_URL, current_params)
             records = data.get('items', [])  # Based on your JSON structure
             
             if not records:
@@ -141,9 +215,8 @@ def extract_permit_data(
     
     logger.info(f"Extraction complete. Total records: {len(all_records)}")
     return all_records  # Return complete raw data
- 
 # CHQ: Claude AI generated function
-def transform_permit_duration(raw_permits):
+def transform_permit_duration_old(raw_permits):
     """
     Transforms raw permit data for duration analysis.
     Returns a pandas DataFrame ready for analysis and loading.
@@ -208,6 +281,54 @@ def transform_permit_duration(raw_permits):
     return df_clean
 
 
+def transform_permit_duration(raw_permits):
+    """
+    Transforms raw permit data for duration analysis.
+    Selects and derives only fields needed for this specific analysis.
+    """
+    transformed = []
+    
+    for permit in raw_permits:
+        # Skip if missing critical fields
+        if not all([permit.get('file_date'), permit.get('issue_date'), permit.get('final_date')]):
+            continue
+        
+        # Select key fields + calculate derived metrics
+        record = {
+            # Key identifiers
+            'permit_id': permit['id'],
+            'permit_number': permit['number'],
+            'permit_type': permit['type'],
+            'permit_subtype': permit['subtype'],
+            'status': permit['status'],
+            
+            # Dates
+            'file_date': permit['file_date'],
+            'issue_date': permit['issue_date'],
+            'final_date': permit.get('final_date'),
+            
+            # Durations
+            'approval_duration': permit.get('approval_duration'),
+            'construction_duration': permit.get('construction_duration'),
+            'total_duration': permit.get('total_duration'),
+            
+            # Derived metrics
+            'approval_ratio': permit.get('approval_duration', 0) / permit.get('total_duration', 1) if permit.get('total_duration') else None,
+            'construction_ratio': permit.get('construction_duration', 0) / permit.get('total_duration', 1) if permit.get('total_duration') else None,
+            
+            # Categorization
+            'duration_category': categorize_duration(permit.get('total_duration')),
+            'bottleneck_phase': 'approval' if permit.get('approval_duration', 0) > permit.get('construction_duration', 0) else 'construction',
+            
+            # Optional context fields
+            'property_type': permit.get('property_type'),
+            'job_value': permit.get('job_value'),
+        }
+        
+        transformed.append(record)
+    
+    return transformed
+
 def categorize_duration(days):
     """Categorize permit duration."""
     if days is None:
@@ -235,7 +356,6 @@ def load_data(df, conn_string, table_name="permit_durations"):
         from sqlalchemy.types import String, DateTime, Float, Integer, Numeric
         
         engine = create_engine(conn_string)
-
         logger.info(f"Attempting to load {len(df)} records into '{table_name}' table...")
         
         # Dtype mapping for transformed permit duration data
@@ -297,9 +417,105 @@ def load_data(df, conn_string, table_name="permit_durations"):
   
 # --- Main ETL Orchestration Function ---
 
+# --- API CALL FUNCTION ---
+def fetch_construction_permits(params):
+    """
+    Fetches data from the Shovels API.
+    """
+    if not SHOVELS_BASE_URL or not SHOVELS_API_KEY:
+        raise ValueError("SHOVELS_BASE_URL and SHOVELS_API_KEY must be set")
+    
+    url = f"{SHOVELS_BASE_URL}/v2/permits/search"
+    headers = {'X-API-Key': SHOVELS_API_KEY}
+    
+    logger.info(f"Fetching from: {url} with params: {params}")
+    
+    try:
+        response = requests.get(url, params=params, headers=headers, timeout=30)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.HTTPError as e:
+        logger.error(f"HTTP {e.response.status_code}: {e.response.text}")
+        raise
+    except Exception as e:
+        logger.error(f"Request failed: {e}")
+        raise
 
 
-def construction_etl(start_year, start_month, start_day, end_year, end_month, end_day, zip_code, num_permits, conn_string):
+# --- EXTRACT FUNCTION ---
+def extract_permit_data(
+    start_year=2025,
+    start_month=6,
+    start_day=30,
+    end_year=2026,
+    end_month=1,
+    end_day=24,
+    zip_code=78701,
+    num_permits=100
+):
+    """Extract permits - single API call."""
+    params = {
+        'start_year': start_year,
+        'start_month': start_month,
+        'start_day': start_day,
+        'end_year': end_year,
+        'end_month': end_month,
+        'end_day': end_day,
+        'zip_code': zip_code,
+        'num_permits': num_permits
+    }
+    
+    data = fetch_construction_permits(params)
+    records = data.get('items', [])
+    
+    logger.info(f"Extracted {len(records)} records")
+    return records
+
+
+# --- MAIN ETL FUNCTION ---
+def construction_etl(start_year, start_month, start_day, 
+                     end_year, end_month, end_day, 
+                     zip_code, num_permits, conn_string):
+    """
+    Orchestrates the ETL process for permit data.
+    """
+    logger.info(f"Running ETL from {start_year}-{start_month}-{start_day} to {end_year}-{end_month}-{end_day}")
+    logger.info("--- ETL process started ---")
+    
+    # EXTRACT
+    logger.info("--- EXTRACT STEP ---")
+    raw_data = extract_permit_data(
+        start_year=start_year,
+        start_month=start_month,
+        start_day=start_day,
+        end_year=end_year,
+        end_month=end_month,
+        end_day=end_day,
+        zip_code=zip_code,
+        num_permits=num_permits
+    )
+    
+    if not raw_data:
+        logger.info("No raw data extracted. ETL process aborted.")
+        return
+    
+    # TRANSFORM
+    logger.info("--- TRANSFORM STEP ---")
+    transformed_data = transform_permit_duration(raw_data)
+    df = pd.DataFrame(transformed_data)
+    logger.info(f"Transformed {len(df)} records")
+    
+    if df.empty:
+        logger.info("No data to load after transformation")
+        return
+    
+    # LOAD
+    logger.info("--- LOAD STEP ---")
+    load_data(df, conn_string, "permit_durations")
+    
+    logger.info("--- ETL process finished ---")
+
+def construction_etl_old(start_year, start_month, start_day, end_year, end_month, end_day, zip_code, num_permits, conn_string):
     """
     Orchestrates the ETL process for Monarch Butterfly data for a given month and year.
     """
@@ -346,15 +562,16 @@ def construction_etl(start_year, start_month, start_day, end_year, end_month, en
     )
     if raw_data:
         logger.info("\n\n\n--- TRANSFORM STEP ---\n\n\n")
-        # transformed_df = transform_gbif_data(raw_data)
-        # if not transformed_df.empty:
-        logger.info("\n\n\n--- LOAD STEP ---\n\n\n")
-            # load_data(transformed_df, conn_string, my_calendar[month] + " " + str(year))
-            # load_data(transformed_df, conn_string, calendar.month_name[month] + " " + str(year))
-        # else:
-            # logger.info("Transformed DataFrame is empty. No data to load.")
+        transformed_data = transform_permit_duration(raw_data)
+        df = pd.DataFrame(transformed_data)
+        logger.info(f"Transformed {len(df)} records")
+        
+        if not df.empty:
+            logger.info("\n\n\n--- LOAD STEP ---\n\n\n")
+            load_data(df, conn_string, "permit_durations")
+        else:
+            logger.info("No data to load after transformation")
 
-        load_data()
     else:
         logger.info("No raw data extracted. ETL process aborted.")
 
