@@ -48,7 +48,7 @@ def fetch_construction_permits(params):
     response = requests.get(url, params=params, headers=headers, timeout=30)
     response.raise_for_status()
     return response.json()
- 
+
 
 def extract_all_permits(zip_code=78701, max_records=1000):
     """
@@ -377,6 +377,7 @@ def register_date_in_inventory(engine, date_obj, table_name, count):
  
 # --- Main ETL Orchestration Function ---
 
+ 
 
 # --- EXTRACT FUNCTION ---
 def extract_permit_data(
