@@ -43,41 +43,62 @@ def fetch_construction_permits(params):
     url = f"{SHOVELS_BASE_URL}/permits/search"
     headers = {"X-API-Key": SHOVELS_API_KEY}
 
-    logger.info(f"Fetching from: {url} with params: {params}")
+    
+    start_date = f"{params['start_year']-params['start_month']-params['start_day']}"
+    end_date = f"{params['end_year']-params['end_month']-params['end_day']}"
 
-    response = requests.get(url, params=params, headers=headers, timeout=30)
+    final_params = {
+        'size': params['num_permits'],
+        'permit_from': start_date,
+        'permit_to': end_date,
+        'geo_id': params['zip_code'], 
+    }
+
+    logger.info(f"Fetching from: {url} with params: {final_params}")
+
+    response = requests.get(url, params=final_params, headers=headers, timeout=30)
     response.raise_for_status()
     return response.json()
 
 
-def extract_all_permits(zip_code=78701, max_records=1000):
-    """
-    Extracts ALL permits using pagination.
-    Loops until no more data or max_records reached.
-    """
-    all_records = []
-    offset = 0
-    page_size = 100
+# def extract_all_permits(zip_code=78701, max_records=1000):
+#     """
+#     Extracts ALL permits using pagination.
+#     Loops until no more data or max_records reached.
+#     """
+#     all_records = []
+#     offset = 0
+#     page_size = 100
     
-    while len(all_records) < max_records:
-        params = {
-            'zip_code': zip_code,
-            'num_permits': page_size,
-            'offset': offset  # This changes each loop
-        }
+#     while len(all_records) < max_records:
+#         # params = {
+#         #     'zip_code': zip_code,
+#         #     'num_permits': page_size,
+#         #     'offset': offset  # This changes each loop
+#         # }
+#         params = {
+#             'start_year': start_year,
+#             'start_month': start_month,
+#             'start_day': start_day,
+#             'end_year': end_year,
+#             'end_month': end_month,
+#             'end_day': end_day,
+#             'zip_code': zip_code,
+#             'num_permits': num_permits
+#         }
         
-        data = fetch_construction_permits(params)
-        records = data.get('items', [])
+#         data = fetch_construction_permits(params)
+#         records = data.get('items', [])
         
-        if not records:
-            break  # No more data
+#         if not records:
+#             break  # No more data
         
-        all_records.extend(records)
-        offset += len(records)
+#         all_records.extend(records)
+#         offset += len(records)
         
-        logger.info(f"Fetched {len(records)} records. Total: {len(all_records)}")
+#         logger.info(f"Fetched {len(records)} records. Total: {len(all_records)}")
     
-    return all_records
+#     return all_records
 
 # Simple version for daily ETL
 def extract_permit_dataold2(zip_code=78701, num_permits=100):
@@ -529,7 +550,8 @@ def test_api_endpoint():
     
     test_cases = [
     {
-        "zip_code": "78701",
+        "geo_id": "78701",
+        "size": 50,
         "permit_from": "2025-06-01",
         "permit_to": "2026-01-02",
         "num_permits": 1,
