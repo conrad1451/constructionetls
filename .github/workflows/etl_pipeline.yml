@@ -59,7 +59,34 @@ jobs:
         # run: python etl_past_day_script.py 2>&1 | tee etl_output.log
         run: python etl_script.py 2>&1 | tee etl_output.log
 
-      # CHQ: Put some more tests here
+      # CHQ: step added by Claude AI
+      - name: Validate record count
+        run: |
+          # Check that we actually loaded records
+          RECORD_COUNT=$(grep -oP "Successfully loaded \K\d+" etl_output.log | tail -1)
+          if [ -z "$RECORD_COUNT" ] || [ "$RECORD_COUNT" -eq 0 ]; then
+            echo "::error::No records were loaded"
+            exit 1
+          fi
+          echo "✓ Loaded $RECORD_COUNT records"
+
+      # CHQ: step added by Claude AI
+      - name: Check for data validation errors
+        run: |
+          if grep -i "validation error\|invalid data\|assertion error" etl_output.log; then
+            echo "::error::Data validation failed"
+            exit 1
+          fi
+          echo "✓ Data validation passed"
+
+      # CHQ: step added by Claude AI
+      - name: Verify required columns present
+        run: |
+          if grep -i "KeyError\|missing column\|column not found" etl_output.log; then
+            echo "::error::Required columns missing from data"
+            exit 1
+          fi
+          echo "✓ All required columns present"
 
       # CHQ: step added by Gemini AI
       - name: Check ETL Results for Data Loading Success
