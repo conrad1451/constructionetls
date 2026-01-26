@@ -533,12 +533,7 @@ def test_api_endpoint():
         "permit_from": "2025-06-01",
         "permit_to": "2026-01-02",
         "num_permits": 1,
-        "geo_ids": {
-            "address_id": "KwvkMdrEwQ8",
-            "city_id": "a4xysKbZwqg",
-            "county_id": "65UbV6wH0Wk",
-            "jurisdiction_id": "q8fdm_HmVcc"
-        }
+        "geo_ids": "q8fdm_HmVcc",
     }
     ]
     
