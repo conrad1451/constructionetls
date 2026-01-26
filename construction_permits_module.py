@@ -45,69 +45,19 @@ SHOVELS_API_KEY = os.getenv('SHOVELS_API_KEY')
 @retry(
     wait=wait_exponential(multiplier=1, min=2, max=10),
     stop=stop_after_attempt(5),
-    retry=retry_if_exception_type((
-        requests.exceptions.ConnectionError,
-        requests.exceptions.Timeout,
-        requests.exceptions.HTTPError # This includes 4xx and 5xx errors from the AI server
-    )),
-    reraise=True # Re-raise the last exception after retries are exhausted
+    retry=retry_if_exception_type(requests.exceptions.RequestException),
+    reraise=True
 )
-
-# CHQ: Gemini AI removed the endpoint parameter to function so endpoint is constructed from the params
-def fetch_construction_permits_old(params):
-    """
-    Fetches data from the Shovels API with retry logic.
-    """
-    if not SHOVELS_BASE_URL:
-        raise ValueError("SHOVELS_BASE_URL environment variable is not set.")
-    
-    endpoint = f"{SHOVELS_BASE_URL}/v2/permits/search"
-    headers = {"X-API-Key": SHOVELS_API_KEY}
-    
-    logger.info(f"Attempting to fetch data from: {endpoint} with params: {params}")
-    response = requests.get(endpoint, params=params, headers=headers)
+def fetch_construction_permits(params):
+    url = f"{SHOVELS_BASE_URL}/v2/permits/search"
+    response = requests.get(
+        url,
+        params=params,
+        headers={"X-API-Key": SHOVELS_API_KEY},
+        timeout=30
+    )
     response.raise_for_status()
     return response.json()
-
- 
-def fetch_construction_permits(base_url, params, max_retries=3):
-    """
-    Fetch construction permits with limited retries.
-    """
-    url = f"{base_url}/v2/permits/search"
-    
-    logger.info(f"Attempting to fetch data from: {url} with params: {params}")
-     
-    for attempt in range(max_retries):
-        try:
-            response = requests.get(
-                url, 
-                params=params,
-                headers={'Authorization': f'Bearer {SHOVELS_API_KEY}'},  # If needed
-                timeout=30
-            )
-            response.raise_for_status()
-            return response.json()
-            
-        except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 404:
-                logger.error(f"404 Not Found - endpoint or params invalid")
-                raise  # Don't retry 404s
-            
-            if attempt < max_retries - 1:
-                wait_time = 2 ** attempt  # Exponential backoff
-                logger.warning(f"Attempt {attempt + 1} failed, retrying in {wait_time}s...")
-                time.sleep(wait_time)
-            else:
-                logger.error(f"All {max_retries} attempts failed")
-                raise
-                
-        except Exception as e:
-            logger.error(f"Request failed: {e}")
-            raise
-    
-    return None
-
 # --- Extraction Function ---
  
 
@@ -127,7 +77,7 @@ def extract_all_permits(zip_code=78701, max_records=1000):
             'offset': offset  # This changes each loop
         }
         
-        data = fetch_construction_permits(SHOVELS_BASE_URL, params)
+        data = fetch_construction_permits(params)
         records = data.get('items', [])
         
         if not records:
@@ -144,7 +94,7 @@ def extract_all_permits(zip_code=78701, max_records=1000):
 def extract_permit_dataold2(zip_code=78701, num_permits=100):
     """Get the latest permits - one API call."""
     params = {'zip_code': zip_code, 'num_permits': num_permits}
-    data = fetch_construction_permits(SHOVELS_BASE_URL, params)
+    data = fetch_construction_permits(params)
     return data.get('items', [])
 
 # CHQ: Claude AI included pagination 
@@ -183,7 +133,7 @@ def extract_permit_data_older(
         current_params['offset'] = offset
         
         try:
-            data = fetch_construction_permits(SHOVELS_BASE_URL, current_params)
+            data = fetch_construction_permits(current_params)
             records = data.get('items', [])  # Based on your JSON structure
             
             if not records:
@@ -414,32 +364,29 @@ def load_data(df, conn_string, table_name="permit_durations"):
     except Exception as e:
         logger.error(f"Error loading data into database: {e}", exc_info=True)
         raise  # Re-raise to see full error
-  
+    
+# CHQ: Gemini AI fixed function to pass parameters as a dictionary 
+# Inside your load logic after the data is successfully saved to the new table
+def register_date_in_inventory(engine, date_obj, table_name, count):
+    # 1. Use named placeholders (:key)
+    query = text("""
+    INSERT INTO data_inventory (available_date, table_name, record_count)
+    VALUES (:available_date, :table_name, :record_count)
+    ON CONFLICT (available_date) DO UPDATE SET 
+        table_name = EXCLUDED.table_name,
+        record_count = EXCLUDED.record_count,
+        processed_at = CURRENT_TIMESTAMP;
+    """)
+    
+    with engine.begin() as conn:
+        # 2. Pass as a DICTIONARY to satisfy SQLAlchemy 2.0
+        conn.execute(query, {
+            "available_date": date_obj,
+            "table_name": table_name,
+            "record_count": count
+        })
+ 
 # --- Main ETL Orchestration Function ---
-
-# --- API CALL FUNCTION ---
-def fetch_construction_permits(params):
-    """
-    Fetches data from the Shovels API.
-    """
-    if not SHOVELS_BASE_URL or not SHOVELS_API_KEY:
-        raise ValueError("SHOVELS_BASE_URL and SHOVELS_API_KEY must be set")
-    
-    url = f"{SHOVELS_BASE_URL}/v2/permits/search"
-    headers = {'X-API-Key': SHOVELS_API_KEY}
-    
-    logger.info(f"Fetching from: {url} with params: {params}")
-    
-    try:
-        response = requests.get(url, params=params, headers=headers, timeout=30)
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.HTTPError as e:
-        logger.error(f"HTTP {e.response.status_code}: {e.response.text}")
-        raise
-    except Exception as e:
-        logger.error(f"Request failed: {e}")
-        raise
 
 
 # --- EXTRACT FUNCTION ---
