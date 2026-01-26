@@ -526,6 +526,48 @@ def construction_etl_old(start_year, start_month, start_day, end_year, end_month
 
  
 
+def test_api_endpoint():
+    """Test if the basic API endpoint works."""
+    import requests
+    
+    if not SHOVELS_BASE_URL or not SHOVELS_API_KEY:
+        logger.error("API credentials not set")
+        return False
+    
+    # Test 1: Minimal parameters
+    url = f"{SHOVELS_BASE_URL}/v2/permits/search"
+    headers = {'X-API-Key': SHOVELS_API_KEY}
+    
+    test_cases = [
+        # Test with just zip code
+        {'zip_code': '78701'},
+        
+        # Test with zip and limit
+        {'zip_code': '78701', 'limit': 10},
+        
+        # Test with different parameter name
+        {'zip_code': '78701', 'page_size': 10},
+    ]
+    
+    for i, params in enumerate(test_cases, 1):
+        logger.info(f"Test {i}: {params}")
+        try:
+            response = requests.get(url, params=params, headers=headers, timeout=30)
+            logger.info(f"  Status: {response.status_code}")
+            logger.info(f"  Response: {response.text[:200]}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                logger.info(f"  Keys in response: {data.keys()}")
+                logger.info(f"  SUCCESS! Use these params: {params}")
+                return True
+        except Exception as e:
+            logger.error(f"  Error: {e}")
+    
+    return False
+
+
+
 def permit_search_etl_scan(start_year, start_month, start_day, end_year, end_month, end_day, zip_code, num_permits, conn_string):
     """
     Orchestrates the ETL process for Construction data for a given month and year.
