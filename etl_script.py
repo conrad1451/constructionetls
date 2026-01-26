@@ -27,5 +27,8 @@ if __name__ == '__main__':
         target_year += 1
  
 
+# June 30 2024 - Jan 24 2026
+# construction_permits_module.construction_etl(2024, 6, 30, 2026, 1, 24, 78701, 10, conn_string)
 
-construction_permits_module.construction_etl(2024, 6, 30, 2026, 1, 24, 78701, 10, conn_string)
+# June 30 2025 - Jan 24 2026
+construction_permits_module.construction_etl(2025, 6, 30, 2026, 1, 24, 78701, 10, conn_string)
