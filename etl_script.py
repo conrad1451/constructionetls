@@ -2,8 +2,7 @@
 
 import os
 import logging
-import sys
-import 
+import sys 
 
 import construction_permits_module
 from datetime import datetime, timedelta
