@@ -31,7 +31,7 @@ SHOVELS_API_KEY = os.getenv('SHOVELS_API_KEY')
  
 # --- Utility Functions ---
 @retry(
-    wait=wait_exponential(multiplier=1, min=2, max=10),
+    wait=wait_exponential(multiplier=1, min=2, max=12),
     stop=stop_after_attempt(5),
     retry=retry_if_exception_type(requests.exceptions.RequestException),
     reraise=True
@@ -116,7 +116,7 @@ def extract_permit_data_older(
     end_month=1,
     end_day=24,
     zip_code=78701,
-    num_permits=10,    
+    num_permits=20,    
 ):
     """
     Extracts permit data from the Shovels API.
@@ -125,7 +125,7 @@ def extract_permit_data_older(
     all_records = []
     offset = 0
     pages_fetched = 0
-    num_pages_to_extract = 10
+    num_pages_to_extract = 20
     
     params = {
         'start_year': start_year,
