@@ -109,7 +109,7 @@ def extract_permit_data(
         current_params['offset'] = offset
         
         try:
-            data = fetch_construction_permits(SHOVELS_BASE_URL, current_params)
+            data = fetch_construction_permits(current_params)
             records = data.get('items', [])  # Based on your JSON structure
             
             if not records:
