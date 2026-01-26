@@ -30,18 +30,6 @@ SHOVELS_BASE_URL = os.getenv('SHOVELS_BASE_URL')
 SHOVELS_API_KEY = os.getenv('SHOVELS_API_KEY')
  
 # --- Utility Functions ---
-
-@retry(
-    wait=wait_exponential(multiplier=1, min=2, max=10),
-    stop=stop_after_attempt(5),
-    retry=retry_if_exception_type((
-        requests.exceptions.ConnectionError,
-        requests.exceptions.Timeout,
-        requests.exceptions.HTTPError # This includes 4xx and 5xx errors from the server
-    )),
-    reraise=True
-) 
-# --- NEW: Function to call the AI endpoint in batch mode ---
 @retry(
     wait=wait_exponential(multiplier=1, min=2, max=10),
     stop=stop_after_attempt(5),
@@ -49,16 +37,17 @@ SHOVELS_API_KEY = os.getenv('SHOVELS_API_KEY')
     reraise=True
 )
 def fetch_construction_permits(params):
-    url = f"{SHOVELS_BASE_URL}/v2/permits/search"
-    response = requests.get(
-        url,
-        params=params,
-        headers={"X-API-Key": SHOVELS_API_KEY},
-        timeout=30
-    )
+    if not SHOVELS_BASE_URL or not SHOVELS_API_KEY:
+        raise ValueError("SHOVELS_BASE_URL and SHOVELS_API_KEY must be set")
+
+    url = f"{SHOVELS_BASE_URL}/permits/search"
+    headers = {"X-API-Key": SHOVELS_API_KEY}
+
+    logger.info(f"Fetching from: {url} with params: {params}")
+
+    response = requests.get(url, params=params, headers=headers, timeout=30)
     response.raise_for_status()
     return response.json()
-# --- Extraction Function ---
  
 
 def extract_all_permits(zip_code=78701, max_records=1000):
@@ -411,7 +400,6 @@ def extract_permit_data(
         'zip_code': zip_code,
         'num_permits': num_permits
     }
-    
     data = fetch_construction_permits(params)
     records = data.get('items', [])
     
@@ -443,9 +431,9 @@ def construction_etl(start_year, start_month, start_day,
     )
     
     if not raw_data:
-        logger.info("No raw data extracted. ETL process aborted.")
-        return
-    
+        raise RuntimeError("ETL failed: no data extracted")
+     
+     
     # TRANSFORM
     logger.info("--- TRANSFORM STEP ---")
     transformed_data = transform_permit_duration(raw_data)
@@ -535,18 +523,11 @@ def test_api_endpoint():
         return False
     
     # Test 1: Minimal parameters
-    url = f"{SHOVELS_BASE_URL}/v2/permits/search"
+    url = f"{SHOVELS_BASE_URL}/permits/search"
     headers = {'X-API-Key': SHOVELS_API_KEY}
     
     test_cases = [
-        # Test with just zip code
-        {'zip_code': '78701'},
-        
-        # Test with zip and limit
-        {'zip_code': '78701', 'limit': 10},
-        
-        # Test with different parameter name
-        {'zip_code': '78701', 'page_size': 10},
+    {'zip_code': '78701', 'num_permits': 1}
     ]
     
     for i, params in enumerate(test_cases, 1):
