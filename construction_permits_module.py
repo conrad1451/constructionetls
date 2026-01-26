@@ -48,10 +48,11 @@ def fetch_construction_permits(params):
     end_date = f"{params['end_year']-params['end_month']-params['end_day']}"
 
     final_params = {
-        'size': params['num_permits'],
+        'geo_id': params['zip_code'], 
+        'size': 15,
         'permit_from': start_date,
         'permit_to': end_date,
-        'geo_id': params['zip_code'], 
+        'num_permits': params['num_permits'],
     }
 
     logger.info(f"Fetching from: {url} with params: {final_params}")
@@ -402,12 +403,12 @@ def register_date_in_inventory(engine, date_obj, table_name, count):
 
 # --- EXTRACT FUNCTION ---
 def extract_permit_data(
-    start_year=2025,
-    start_month=6,
-    start_day=30,
-    end_year=2026,
-    end_month=1,
-    end_day=24,
+    start_year="2025",
+    start_month="06",
+    start_day="30",
+    end_year="2026",
+    end_month="01",
+    end_day="24",
     zip_code=78701,
     num_permits=100
 ):
