@@ -530,8 +530,8 @@ def test_api_endpoint():
     test_cases = [
     {
         "zip_code": "78701",
-        "permit_from": "2024-01-01",
-        "permit_to": "2024-01-02",
+        "permit_from": "2025-06-01",
+        "permit_to": "2026-01-02",
         "num_permits": 1,
     }
     ]
