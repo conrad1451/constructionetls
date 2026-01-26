@@ -5,6 +5,9 @@ import construction_permits_module
 from datetime import datetime, timedelta
 
 XATA_DB_CONSTRUCTION = os.getenv('XATA_DB_CONSTRUCTION')
+SHOVELS_BASE_URL = os.getenv('SHOVELS_BASE_URL')
+SHOVELS_API_KEY = os.getenv('SHOVELS_API_KEY')
+
  
 if not XATA_DB_CONSTRUCTION:
     print("FATAL ERROR: XATA_DB_CONSTRUCTION environment variable is NOT SET.")
