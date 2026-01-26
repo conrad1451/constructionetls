@@ -533,7 +533,7 @@ def test_api_endpoint():
         "permit_from": "2025-06-01",
         "permit_to": "2026-01-02",
         "num_permits": 1,
-        "geo_ids": "q8fdm_HmVcc",
+        "geo_id": "q8fdm_HmVcc"
     }
     ]
     
