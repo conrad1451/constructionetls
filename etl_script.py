@@ -38,5 +38,9 @@ if __name__ == "__main__":
 # June 30 2024 - Jan 24 2026
 # construction_permits_module.construction_etl(2024, 6, 30, 2026, 1, 24, 78701, 10, conn_string)
 
-# June 30 2025 - Jan 24 2026
-construction_permits_module.construction_etl(2025, 6, 30, 2026, 1, 24, 78701, 10, conn_string)
+# # June 30 2025 - Jan 24 2026
+# construction_permits_module.construction_etl(2025, 6, 30, 2026, 1, 24, 78701, 10, conn_string)
+
+
+# Jan 25 2026 - Feb 14 2026
+construction_permits_module.construction_etl(2026, 1, 25, 2026, 2, 14, 78701, 10, conn_string)
